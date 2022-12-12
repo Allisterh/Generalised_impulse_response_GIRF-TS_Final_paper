@@ -9,5 +9,5 @@ Init_fctn <- function() {
     mutate(Date = dmy(Date)) %>%
     rename(Coal = `Gross inland deliveries hard coal`,
            Price = `EU Carbon Price Permits`) %>%
-    mutate_if(is.numeric, log)
+    mutate_if(is.numeric, log) 
 }
