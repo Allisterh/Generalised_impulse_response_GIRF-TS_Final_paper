@@ -1,3 +1,6 @@
+print("Marie")
+print("Arman")
+
 rm(list = ls())
 # Load functions
 Scripts <- c("Various_functions.R")
