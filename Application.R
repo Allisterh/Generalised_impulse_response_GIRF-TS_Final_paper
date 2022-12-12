@@ -62,5 +62,11 @@ Data_dprice %>%
 Reduced_mat <- dplyr::select(Data_dprice, c(dPrice, Coal)) %>%
   as.matrix()
 p <- VARselect(Reduced_mat, lag.max = 5, type = "trend")$selection["SC(n)"]
-CI_test <- ca.jo(Reduced_mat, type="trace", ecdet="trend", K = 2)
-CI_test %>% summary()
+Trace_test <- ca.jo(Reduced_mat, type="trace", ecdet="const", spec = "transitory", K = max(p, 2))
+Trace_test %>% summary()
+
+Eigen_test <- ca.jo(Reduced_mat, type="eigen", ecdet="const", spec = "transitory", K = max(p, 2))
+Eigen_test %>% summary()
+
+VECM <- cajorls(Trace_test, r = 1)
+VECM
