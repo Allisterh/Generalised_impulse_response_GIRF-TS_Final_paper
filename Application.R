@@ -1,7 +1,7 @@
 print("Marie")
 print("Arman")
-# gross inland deliveries are in logged differences to get I(1), they were I(2) before
-#EU carbon permit prices are just logged since they were already I(1)
+# EU carbon permit prices are in logged differences to get I(1), they were I(2) before
+#Coal are just logged since they were already I(1)
 # log to stabilize variance (get rid of heteroskedasticity)
 
 
@@ -12,16 +12,18 @@ Scripts <- c("Various_functions.R")
 sapply(Scripts, source)
 # Load packages and data
 Init_fctn()
-Data$Coal
+
 
 #Pantula principle
-SecondDiffCoal <- diff(Data$Coal,differences = 2)
-FirstDiffCoal <- diff(Data$Coal)
+SecondDiffPrice <- diff(Data$Price,differences = 2)
+FirstDiffPrice <- diff(Data$Price)
 
-adf(SecondDiffCoal,deterministics="intercept")
-adf(FirstDiffCoal,deterministics="intercept")
-adf(deterministics=
-      "trend")
+adf(SecondDiffPrice,deterministics="intercept")
+adf(FirstDiffPrice,deterministics="intercept")
+adf(Data$Price,deterministics="trend")
+
+plot(Data$Price)
+plot(SecondDiffPrice)
 
 # Plot
 Data %>%
