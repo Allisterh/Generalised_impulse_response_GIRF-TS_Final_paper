@@ -1,4 +1,5 @@
 print("Marie")
+print("Arman")
 
 rm(list = ls())
 # Load functions
