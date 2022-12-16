@@ -1,71 +1,95 @@
-print("Marie")
-print("Arman")
-# gross inland deliveries are in logged differences to get I(1), they were I(2) before
-#EU carbon permit prices are just logged since they were already I(1)
-# log to stabilize variance (get rid of heteroskedasticity)
-
-
+#------------------------------------------------------------------------------------------#
+# Prepare workspace
+#------------------------------------------------------------------------------------------#
 
 rm(list = ls())
 # Load functions
-Scripts <- c("Various_functions.R")
+Scripts <- c("R/Various_functions.R", "R/Plots.R")
 sapply(Scripts, source)
-# Load packages and data
+
+# Load packages and input the data
 Init_fctn()
-Data$Coal
 
-#Pantula principle
-SecondDiffCoal <- diff(Data$Coal,differences = 2)
-FirstDiffCoal <- diff(Data$Coal)
+#------------------------------------------------------------------------------------------#
+# Run the tests for the integration order on the log transformed series
+#------------------------------------------------------------------------------------------#
 
-adf(SecondDiffCoal,deterministics="intercept")
-adf(FirstDiffCoal,deterministics="intercept")
-adf(deterministics=
-      "trend")
+Lvl_fd_plot_fctn(Data = lvlData, logData = logData, aes_list = Plot_list, Plot_path = Plot_path)
 
-# Plot
-Data %>%
-  ggplot() +
-  geom_line(aes(x = Date, y = Coal, color = "Log gross inland deliveries hard coal")) +
-  geom_line(aes(x = Date, y = Price / max(Price) * max(Coal), color = "Log EU Carbon Permit price")) +
-  scale_y_continuous(
-    name = "Log gross inland gross coal deliveries in thou. T",
-    sec.axis = sec_axis(~ . * (max(Data$Price) / max(Data$Coal)), name = "Log EU Carbon Permit Price")
-  ) +
-  labs(color = "")
+# Price exhibits exponential trend in levels and heteroscedasticity in first differences --> 
+# log transformation linearizes the trend in levels and produces a relatively homoscedastic series in first differences
 
-# UR Test
-UR_test <- order_integration(dplyr::select(Data, -Date), max_order = 3)
-UR_test$order_int
-# Difference price once
-Data_dprice <- Data %>%
-  mutate(dPrice = diff_mult(Price, d = 1)) %>%
-  filter(!is.na(dPrice))
+# I do not think that Coal requires any transformation ??
 
-#-------------------------------------------------#
-# Not really sure if both variables have to have the same integration order
-# Maybe ask Ines tomorrow
-#-------------------------------------------------#
+#------------------------------------------------------------------------------------------#
+# Run the tests for the integration order on the log transformed series
+#------------------------------------------------------------------------------------------#
 
-# Plot 2
-Data_dprice %>%
-  ggplot() +
-  geom_line(aes(x = Date, y = Coal, color = "Log gross inland deliveries hard coal")) +
-  geom_line(aes(x = Date, y = dPrice / max(dPrice) * max(Coal), color = "EU Carbon Permit price")) +
-  scale_y_continuous(
-    name = "Gross inland gross coal deliveries in thou. T",
-    sec.axis = sec_axis(~ . * (max(Data_dprice$dPrice) / max(Data_dprice$Coal)), name = "First differences Log EU Carbon Permit Price")
-  ) +
-  labs(color = "")
+# Logged price series
+Pantula_fctn(Series = select(logData, Price), d_max = 4, determ = "trend")
+# Going forward use first differences of the log price series
+
+# Level coal series
+Pantula_fctn(Series = select(lvlData, Coal), d_max = 4, determ = "trend")
+# Use level coal series
+
+# To check my function:
+#order_integration(dplyr::select(logData, c(Coal, Price)), max_order = 3)$order_int
+
+
+#------------------------------------------------------------------------------------------#
+# Check for seasonality
+#------------------------------------------------------------------------------------------#
+
+# Coal series
+Coal_decomposed <- decompose(ts(lvlData$Coal, frequency = 12))
+
+# Seasonal component
+ggplot() +
+  geom_line(aes(x = lvlData$Date, y = as.numeric(Coal_decomposed$seasonal)))
+# Rest
+ggplot() +
+  geom_line(aes(x = lvlData$Date, y = as.numeric(Coal_decomposed$x - Coal_decomposed$seasonal)))
+
+finalData <- tibble(Date = lvlData$Date,
+                     Coal = Coal_decomposed$x - Coal_decomposed$seasonal)
+
+
+# Price series
+Price_decomposed <- decompose(ts(logData$dPrice, frequency = 12))
+
+# Seasonal component
+ggplot() +
+  geom_line(aes(x = lvlData$Date, y = as.numeric(Price_decomposed$seasonal)))
+# Rest
+ggplot() +
+  geom_line(aes(x = lvlData$Date, y = as.numeric(Price_decomposed$x - Price_decomposed$seasonal)))
+
+finalData$Price <- Price_decomposed$x - Price_decomposed$seasonal
+finalData <- filter(finalData, !is.na(Price))
+
+#------------------------------------------------------------------------------------------#
+# Estimate a VAR
+#------------------------------------------------------------------------------------------#
+finalData <- tibble(Date = lvlData$Date,
+                    Price = logData$dPrice,
+                    Coal = logData$Coal) %>%
+  filter(!is.na(Price))
+dataMat <- as.matrix(select(finalData, -Date))
+
+p <- Lag_order_fctn(dataMat, deterministic = "none")
+VAR_model <- VAR(dataMat, p = p)
+VAR_model %>% summary
+
+#------------------------------------------------------------------------------------------#
+# Run cointegration tests
+#------------------------------------------------------------------------------------------#
 
 # CI Test
-Reduced_mat <- dplyr::select(Data_dprice, c(dPrice, Coal)) %>%
-  as.matrix()
-p <- VARselect(Reduced_mat, lag.max = 5, type = "trend")$selection["SC(n)"]
-Trace_test <- ca.jo(Reduced_mat, type="trace", ecdet="const", spec = "transitory", K = max(p, 2))
+Trace_test <- ca.jo(dataMat, type = "trace", ecdet = "const", spec = "transitory", K = max(p, 2))
 Trace_test %>% summary()
 
-Eigen_test <- ca.jo(Reduced_mat, type="eigen", ecdet="const", spec = "transitory", K = max(p, 2))
+Eigen_test <- ca.jo(dataMat, type = "eigen", ecdet = "const", spec = "transitory", K = max(p, 2))
 Eigen_test %>% summary()
 
 VECM <- cajorls(Trace_test, r = 1)
