@@ -14,7 +14,7 @@ Init_fctn()
 # Run the tests for the integration order on the log transformed series
 #------------------------------------------------------------------------------------------#
 
-Lvl_fd_plot_fctn(Data = lvlData, logData = logData, aes_list = Plot_list, Plot_path = Plot_path)
+Lvl_fd_plot_fctn(Data = lvlData, logData = logData, aes_list = Plot_list)
 
 # Price exhibits exponential trend in levels and heteroscedasticity in first differences --> 
 # log transformation linearizes the trend in levels and produces a relatively homoscedastic series in first differences
@@ -26,60 +26,106 @@ Lvl_fd_plot_fctn(Data = lvlData, logData = logData, aes_list = Plot_list, Plot_p
 #------------------------------------------------------------------------------------------#
 
 # Logged price series
-Pantula_fctn(Series = select(logData, Price), d_max = 4, determ = "trend")
+logPrice_I_order <- Pantula_fctn(Data = logData, Variable = "Price", d_max = 4, determ = "trend")
 # Going forward use first differences of the log price series
 
 # Level coal series
-Pantula_fctn(Series = select(lvlData, Coal), d_max = 4, determ = "trend")
+Coal_I_order <- Pantula_fctn(Data = lvlData, Variable = "Coal", d_max = 4, determ = "trend")
 # Use level coal series
 
 # To check my function:
 #order_integration(dplyr::select(logData, c(Coal, Price)), max_order = 3)$order_int
 
-
 #------------------------------------------------------------------------------------------#
-# Check for seasonality
+# Control for seasonality
 #------------------------------------------------------------------------------------------#
 
 # Coal series
-Coal_decomposed <- decompose(ts(lvlData$Coal, frequency = 12))
+SlvlData <- Deseason_fctn(Data = lvlData, Variable = "Coal")
 
-# Seasonal component
-ggplot() +
-  geom_line(aes(x = lvlData$Date, y = as.numeric(Coal_decomposed$seasonal)))
-# Rest
-ggplot() +
-  geom_line(aes(x = lvlData$Date, y = as.numeric(Coal_decomposed$x - Coal_decomposed$seasonal)))
-
-finalData <- tibble(Date = lvlData$Date,
-                     Coal = Coal_decomposed$x - Coal_decomposed$seasonal)
-
+# Make plots of seasonality and de-seasoned series
+Seas_plot_fctn(Data = SlvlData, Variable = "Coal", aes_list = Plot_list)
 
 # Price series
-Price_decomposed <- decompose(ts(logData$dPrice, frequency = 12))
+SlogData <- Deseason_fctn(Data = logData, Variable = "dPrice")
 
-# Seasonal component
-ggplot() +
-  geom_line(aes(x = lvlData$Date, y = as.numeric(Price_decomposed$seasonal)))
-# Rest
-ggplot() +
-  geom_line(aes(x = lvlData$Date, y = as.numeric(Price_decomposed$x - Price_decomposed$seasonal)))
+# Make plots of seasonality and de-seasoned series
+Seas_plot_fctn(Data = SlogData, Variable = "dPrice", aes_list = Plot_list)
 
-finalData$Price <- Price_decomposed$x - Price_decomposed$seasonal
-finalData <- filter(finalData, !is.na(Price))
+#------------------------------------------------------------------------------------------#
+# Plot of the final two series we will be working with
+#------------------------------------------------------------------------------------------#
+
+finalData <- tibble(Date = lvlData$Date,
+                    Price = SlogData$deseasdPrice,
+                    Coal = SlvlData$deseasCoal) %>%
+  filter(!is.na(Price))
+
+Final_series_plot_fctn(Data = finalData, aes_list = Plot_list)
 
 #------------------------------------------------------------------------------------------#
 # Estimate a VAR
 #------------------------------------------------------------------------------------------#
-finalData <- tibble(Date = lvlData$Date,
-                    Price = logData$dPrice,
-                    Coal = logData$Coal) %>%
-  filter(!is.na(Price))
+
 dataMat <- as.matrix(select(finalData, -Date))
 
-p <- Lag_order_fctn(dataMat, deterministic = "none")
+Lag_selection <- VARselect(dataMat, lag.max = 5, type = "const")$selection
+Lag_selection
+p <- Lag_selection["SC(n)"]
+# 4 AR lags
 VAR_model <- VAR(dataMat, p = p)
-VAR_model %>% summary
+VAR_summary <- VAR_model %>% summary
+VAR_summary
+
+#------------------------------------------------------------------------------------------#
+# VAR diagnostics
+#------------------------------------------------------------------------------------------#
+
+VAR_resid <- resid(VAR_model)
+
+# Check the integration order of the residuals
+Resid_Price_I_order <- Pantula_fctn(VAR_resid, "Price", d_max = 4, determ = "none")
+Resid_Coal_I_order <- Pantula_fctn(VAR_resid, "Coal", d_max = 4, determ = "none")
+# Both residuals series are I(1) (assume the integration order of the dependent variables)
+
+# Check for serial correlation in the residuals
+# graphically (univariate)
+ACF_plot_fctn(Data = VAR_resid, Variable = "Price", Interval = .95, aes_list = Plot_list)
+ACF_plot_fctn(Data = VAR_resid, Variable = "Coal", Interval = .95, aes_list = Plot_list)
+# and quantitatively (multivariate)
+Resid_PT_test <- serial.test(VAR_model, lags.pt = 12)
+Resid_PT_test <- serial.test(VAR_model, lags.bg = 12, type = c("BG"))
+# Seems like residual serial correlation is driven by December observations of the price series 
+
+# Check if the VAR is stable
+VAR_summary$roots
+any(VAR_summary$roots >= 1)
+# VAR(4) is stable
+
+#------------------------------------------------------------------------------------------#
+# Granger causality analysis
+#------------------------------------------------------------------------------------------#
+
+bruceR::granger_causality(VAR_model, test = c("Chisq"))
+# Coal does not Granger cause Price
+# Price Granger causes Coal
+
+#------------------------------------------------------------------------------------------#
+# Impulse response functions
+#------------------------------------------------------------------------------------------#
+
+# ortho = TRUE identifies a SVAR via short term restrictions (Slides VAR p. 46). We would assume that
+# Price contemporaneously affects Coal, but Coal ONLY affects Price with a lag of at least one period.
+# If ortho = FALSE we use the reduced form errors for the IRF. But those are probably contemporaneously
+# correlated, which pollutes the true Impulse responses.
+# Due to the Granger causality findings and some economic theory I think we can motivate the recursive
+# structure of ortho = TRUE
+
+O_irf <- irf(VAR_model, n.ahead = 12, ortho = TRUE, runs = 500, ci = .95)
+
+# Generalized impulse respones functions (Koop et al. 1996; Pesaran & Shin 1998) do not impose a recursive
+# ordering of the contemporanous correlations
+G_irf <- G_irf_boot_fctn(VAR_model, n.ahead = 12, runs = 100, Interval = .95)
 
 #------------------------------------------------------------------------------------------#
 # Run cointegration tests
