@@ -109,10 +109,44 @@ Serial_test_table_fcnt <- function(Output, Path) {
 #' @export Table in specified folder
 
 
-VECM_table_fctn <- function(Trace, Output, path){
+VECM_table_fctn <- function(Trace, Output, Path){
+  # Extensive form of the estimates produced by ca.jo function
   alpha_mat <- round(Trace@W, 3)
+  alpha_mat <- cbind(rownames(alpha_mat), alpha_mat)
   beta_mat <- round(Trace@V, 3)
-  Gammy_mat <- round(Trace@GAMMA, 3)
+  beta_mat <- cbind(rownames(beta_mat), beta_mat)
+  Gamma_mat <- round(Trace@GAMMA, 3)
+  Gamma_mat <- cbind(rownames(Gamma_mat), Gamma_mat)
+  # Estimates of the cajorls function
+  Output_sum <- summary(Output$rlm)
+  Price_response <- Output_sum$`Response Price.d`$coefficients
+  Price_response <- cbind(rownames(Price_response), round(Price_response, 3))
+  Coal_response <- Output_sum$`Response Coal.d`$coefficients
+  Coal_response <- cbind(rownames(Coal_response), round(Coal_response, 3))
+  Adj_R_sq <- tibble(Price = round(Output_sum$`Response Price.d`$adj.r.squared, 3), 
+                     Coal = round(Output_sum$`Response Coal.d`$adj.r.squared, 3))
+  F_stat <- rbind(Output_sum$`Response Price.d`$fstatistic,
+                  Output_sum$`Response Coal.d`$fstatistic) %>%
+    round(3)
+  F_stat <- cbind(matrix(c("Price", "Coal"), nc = 1), round(F_stat, 3))
   
+  VECM_estimates <- createWorkbook()
+  addWorksheet(VECM_estimates, "alpha")
+  addWorksheet(VECM_estimates, "beta")
+  addWorksheet(VECM_estimates, "Gamma")
+  addWorksheet(VECM_estimates, "beta_norm")
+  addWorksheet(VECM_estimates, "Price_response")
+  addWorksheet(VECM_estimates, "Coal_response")
+  addWorksheet(VECM_estimates, "Adj_R_sq")
+  addWorksheet(VECM_estimates, "F_stat")
+  writeData(VECM_estimates, "alpha", alpha_mat)
+  writeData(VECM_estimates, "beta", beta_mat)
+  writeData(VECM_estimates, "Gamma", Gamma_mat)
+  writeData(VECM_estimates, "beta_norm", Output$beta)
+  writeData(VECM_estimates, "Price_response", Price_response)
+  writeData(VECM_estimates, "Coal_response", Coal_response)
+  writeData(VECM_estimates, "Adj_R_sq", Adj_R_sq)
+  writeData(VECM_estimates, "F_stat", F_stat)
+  saveWorkbook(VECM_estimates, file = paste0(Path, "VECM_estimates.xlsx"), overwrite = TRUE)
 }
 
