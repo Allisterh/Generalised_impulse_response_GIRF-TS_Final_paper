@@ -4,7 +4,7 @@
 
 rm(list = ls())
 # Load functions
-Scripts <- c("R/Various_functions.R", "R/Plots.R")
+Scripts <- paste0("R/", list.files(path = paste0(getwd(), "/R")))
 sapply(Scripts, source)
 
 # Load packages and input the data
@@ -25,12 +25,14 @@ Lvl_fd_plot_fctn(Data = lvlData, logData = logData, aes_list = Plot_list)
 # Run the tests for the integration order on the log transformed series
 #------------------------------------------------------------------------------------------#
 
-# Logged price series
-logPrice_I_order <- Pantula_fctn(Data = logData, Variable = "Price", d_max = 4, determ = "trend")
+# Log price series
+logPrice_I_order <- Pantula_fctn(Data = logData, Variable = "Price", d_max = 3, determ = "trend")
+UR_table_fctn(Output = logPrice_I_order, Variable = "Price", Path = Table_path)
 # Going forward use first differences of the log price series
 
 # Level coal series
-Coal_I_order <- Pantula_fctn(Data = lvlData, Variable = "Coal", d_max = 4, determ = "trend")
+Coal_I_order <- Pantula_fctn(Data = lvlData, Variable = "Coal", d_max = 3, determ = "trend")
+UR_table_fctn(Output = Coal_I_order, Variable = "Coal", Path = Table_path)
 # Use level coal series
 
 # To check my function:
@@ -42,13 +44,11 @@ Coal_I_order <- Pantula_fctn(Data = lvlData, Variable = "Coal", d_max = 4, deter
 
 # Coal series
 SlvlData <- Deseason_fctn(Data = lvlData, Variable = "Coal")
-
 # Make plots of seasonality and de-seasoned series
 Seas_plot_fctn(Data = SlvlData, Variable = "Coal", aes_list = Plot_list)
 
 # Price series
 SlogData <- Deseason_fctn(Data = logData, Variable = "dPrice")
-
 # Make plots of seasonality and de-seasoned series
 Seas_plot_fctn(Data = SlogData, Variable = "dPrice", aes_list = Plot_list)
 
@@ -61,7 +61,9 @@ finalData <- tibble(Date = lvlData$Date,
                     Coal = SlvlData$deseasCoal) %>%
   filter(!is.na(Price))
 
+# Construct plot and a table of summary statistics
 Final_series_plot_fctn(Data = finalData, aes_list = Plot_list)
+Summary_stats_fctn(Data = finalData, Path = Table_path)
 
 #------------------------------------------------------------------------------------------#
 # Estimate a VAR
@@ -77,6 +79,8 @@ VAR_model <- VAR(dataMat, p = p)
 VAR_summary <- VAR_model %>% summary
 VAR_summary
 
+VAR_table_fctn(Output = VAR_summary, Path = Table_path)
+
 #------------------------------------------------------------------------------------------#
 # VAR diagnostics
 #------------------------------------------------------------------------------------------#
@@ -85,7 +89,9 @@ VAR_resid <- resid(VAR_model)
 
 # Check the integration order of the residuals
 Resid_Price_I_order <- Pantula_fctn(VAR_resid, "Price", d_max = 4, determ = "none")
+UR_table_fctn(Output = Resid_Price_I_order, Variable = "Price_Resid", Path = Table_path)
 Resid_Coal_I_order <- Pantula_fctn(VAR_resid, "Coal", d_max = 4, determ = "none")
+UR_table_fctn(Output = Resid_Coal_I_order, Variable = "Coal_Resid", Path = Table_path)
 # Both residuals series are I(1) (assume the integration order of the dependent variables)
 
 # Check for serial correlation in the residuals
@@ -106,9 +112,10 @@ any(VAR_summary$roots >= 1)
 # Granger causality analysis
 #------------------------------------------------------------------------------------------#
 
-bruceR::granger_causality(VAR_model, test = c("Chisq"))
+Granger_test <- bruceR::granger_causality(VAR_model, test = c("Chisq"))
 # Coal does not Granger cause Price
 # Price Granger causes Coal
+Granger_table_fctn(Output = Granger_test, Path = Table_path)
 
 #------------------------------------------------------------------------------------------#
 # Impulse response functions
@@ -133,10 +140,14 @@ G_irf <- G_irf_boot_fctn(VAR_model, n.ahead = 12, runs = 100, Interval = .95)
 
 # CI Test
 Trace_test <- ca.jo(dataMat, type = "trace", ecdet = "const", spec = "transitory", K = max(p, 2))
-Trace_test %>% summary()
+Trace_test_summary <- Trace_test %>% summary()
+
+# Table here
 
 Eigen_test <- ca.jo(dataMat, type = "eigen", ecdet = "const", spec = "transitory", K = max(p, 2))
 Eigen_test %>% summary()
 
 VECM <- cajorls(Trace_test, r = 1)
 VECM
+
+# Table here

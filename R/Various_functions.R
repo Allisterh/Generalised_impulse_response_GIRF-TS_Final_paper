@@ -19,7 +19,7 @@ package_fctn <- function(pckg) {
 
 Init_fctn <- function() {
   # Load packages
-  packages <- c("vars", "tidyverse", "readxl", "lubridate", "urca", "bootUR", "scales", "KFAS", "car", "bruceR")
+  packages <- c("vars", "tidyverse", "readxl", "lubridate", "urca", "bootUR", "scales", "KFAS", "car", "bruceR", "openxlsx")
   sapply(packages, package_fctn)
   # Input data
   Read_data <- function(logTransform) {
@@ -38,10 +38,14 @@ Init_fctn <- function() {
   }
   lvlData <<- Read_data(logTransform = F)
   logData <<- Read_data(logTransform = T)
-  # Create folder for the figures
+  # Create folder for the figures and tables
   Plot_path <- paste0(getwd(), "/Plots/")
   if (!dir.exists(Plot_path)) {
     dir.create(Plot_path)
+  }
+  Table_path <<- paste0(getwd(), "/Tables/")
+  if (!dir.exists(Table_path)) {
+    dir.create(Table_path)
   }
   # Set aesthetics for figures
   orange <- "#FF6347"

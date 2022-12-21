@@ -17,8 +17,8 @@ Lvl_fd_plot_fctn <- function(Data, logData, aes_list) {
       mutate(Price = Price / max(Price) * max(Coal))
     fd_Tib <- select(Data, c(Date, dCoal, dPrice)) %>%
       mutate(dPrice = dPrice / max(dPrice, na.rm = T) * max(dCoal, na.rm = T))
-    fd_Tib$Type <- "First differences"
-    lvl_Tib$Type <- "Level"
+    fd_Tib$Type <- paste0("First differences")
+    lvl_Tib$Type <- ifelse(Trans == "", "Level", Trans)
     colnames(fd_Tib) <- colnames(lvl_Tib)
     # Construct the plot
     Lvl_Fd_plot <- rbind(lvl_Tib, fd_Tib) %>%
