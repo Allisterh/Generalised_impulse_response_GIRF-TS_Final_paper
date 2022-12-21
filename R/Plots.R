@@ -1,4 +1,3 @@
-
 #' Function to create a plot that depicts two series once in levels as well as in first differences
 #' @param Data tibble with all level time series
 #' @param logData tibble with all log time series
@@ -9,7 +8,7 @@ Lvl_fd_plot_fctn <- function(Data, logData, aes_list) {
   Lvl_fd_plot <- function(Data, Trans = "", aes_list) {
     # Set the color scheme
     color_map <- aes_list$color_scheme
-    names(color_map) <- c(paste0(Trans, "Coal deliveries"), paste0(Trans, "Permit price"))
+    names(color_map) <- c(paste0(Trans, "Coal supply"), paste0(Trans, "Permit price"))
     # To prevent warning messages
     Data <- filter(Data, !is.na(dCoal))
     # Prepare data for the plot
@@ -23,13 +22,13 @@ Lvl_fd_plot_fctn <- function(Data, logData, aes_list) {
     # Construct the plot
     Lvl_Fd_plot <- rbind(lvl_Tib, fd_Tib) %>%
       ggplot() +
-      geom_line(aes(x = Date, y = Coal, color = paste0(Trans, "Coal deliveries")), linewidth = 1) +
+      geom_line(aes(x = Date, y = Coal, color = paste0(Trans, "Coal supply")), linewidth = 1) +
       geom_line(aes(x = Date, y = Price, color = paste0(Trans, "Permit price")), linewidth = 1) +
       scale_y_continuous(
-        name = "Gross coal deliveries", # in thou. T
+        name = "Coal supply", # in thou. T
         labels = comma_format(big.mark = ",", decimal.mark = "."),
         # limits = c((min(Data$Coal, na.rm = T) * .9), max(Data$Coal, na.rm = T) * 1.1),
-        sec.axis = sec_axis(~ . * (max(Data$Price, na.rm = T) / max(Data$Coal, na.rm = T)), name = "EU Carbon Permit Price"),
+        sec.axis = sec_axis(~ . * (max(Data$Price, na.rm = T) / max(Data$Coal, na.rm = T)), name = "Permit Price"),
       ) +
       facet_grid(rows = vars(Type), scales = "free") +
       scale_x_date(name = "", date_breaks = "1 year", date_labels = c("%Y")) +
@@ -66,15 +65,19 @@ Seas_plot_fctn <- function(Data, Variable, aes_list) {
   Data <- filter(Data, !is.na(Data[, Variable]))
   # Seasonal component (series is defined explicitly so that it can be called dynamically)
   seas <- pull(Data, paste0("seas", Variable))
+  # Label map
+  Label_map <- c(
+    "Coal" = "Coal supply",
+    "dPrice" = expression(paste(log, Delta, " Permit price"))
+  )
   # Construct plot
   Season_plot <- Data %>%
     ggplot(aes()) +
     geom_line(aes(x = Date, y = seas), linewidth = 1) +
     scale_x_date(name = "", date_breaks = "1 year", date_labels = c("%Y")) +
     scale_y_continuous(
-      name = "Gross coal deliveries", # in thou. T
-      labels = comma_format(big.mark = ",", decimal.mark = "."),
-      breaks = seq(-15e02, 15e02, 5e02)
+      name = Label_map[Variable],
+      labels = comma_format(big.mark = ",", decimal.mark = ".")
     ) +
     theme_bw() +
     labs(color = "") +
@@ -97,7 +100,7 @@ Seas_plot_fctn <- function(Data, Variable, aes_list) {
     geom_line(aes(x = Date, y = var, color = "Raw series"), linewidth = 1) +
     scale_x_date(name = "", date_breaks = "1 year", date_labels = c("%Y")) +
     scale_y_continuous(
-      name = "Gross coal deliveries", # in thou. T
+      name = Label_map[Variable],
       labels = comma_format(big.mark = ",", decimal.mark = ".")
     ) +
     scale_color_manual(values = color_map) +
@@ -121,20 +124,20 @@ Seas_plot_fctn <- function(Data, Variable, aes_list) {
 Final_series_plot_fctn <- function(Data, aes_list) {
   # Set color scheme
   color_map <- aes_list$color_scheme
-  names(color_map) <- c("Coal deliveries", "First differences permit price")
+  names(color_map) <- c("Coal supply", "Permit price")
   # Scale the data to fit them in the same plot
   Data_scaled <- Data %>%
     mutate(Price = Price / max(Price) * max(Coal))
   # Construct the plot
   Final_series <- Data_scaled %>%
     ggplot() +
-    geom_line(aes(x = Date, y = Price, color = "First differences permit price"), linewidth = 1) +
-    geom_line(aes(x = Date, y = Coal, color = "Coal deliveries"), linewidth = 1) +
+    geom_line(aes(x = Date, y = Price, color = "Permit price"), linewidth = 1) +
+    geom_line(aes(x = Date, y = Coal, color = "Coal supply"), linewidth = 1) +
     scale_y_continuous(
-      name = "Gross coal deliveries", # in thou. T
+      name = "Coal supply", # in thou. T
       labels = comma_format(big.mark = ",", decimal.mark = "."),
-      breaks = seq(-5e03, 20e03, 5e03),
-      sec.axis = sec_axis(~ . * (max(Data$Price, na.rm = T) / max(Data$Coal, na.rm = T)), name = "EU Carbon Permit Price"),
+      breaks = seq(-6e04, 6e04, 3e04),
+      sec.axis = sec_axis(~ . * (max(Data$Price, na.rm = T) / max(Data$Coal, na.rm = T)), name = expression(paste(log, Delta, " Permit price"))),
     ) +
     scale_color_manual(values = color_map) +
     scale_x_date(name = "", date_breaks = "1 year", date_labels = c("%Y")) +
@@ -156,7 +159,7 @@ Final_series_plot_fctn <- function(Data, aes_list) {
 #' @param aes_list list with plot aesthetics
 #' @export Plots in specified folder
 
-ACF_plot_fctn <- function(Data, Variable, Interval = .95, aes_list) {
+ACF_plot_fctn <- function(Data, Variable, Interval = .95, aes_list, Prefix = "") {
   # Compute the AC values
   ACF <- acf(Data[, Variable], plot = FALSE, lag.max = 20)
   # Compute the confidence interval
@@ -164,22 +167,178 @@ ACF_plot_fctn <- function(Data, Variable, Interval = .95, aes_list) {
   # Prepare the data for the plot
   ACF_vec <- ACF$acf[, 1, 1][-1]
   Lags <- ACF$lag[, 1, 1][-1]
+  # Set labels
+  Label_map <- c(
+    "Coal" = "Coal supply",
+    "Price" = expression(paste(log, Delta, " Permit price"))
+  )
   # Construct the plot
   ACF_plot <- ggplot() +
-    geom_bar(aes(x = Lags, y = ACF_vec), stat = "identity", width = .5) +
+    geom_bar(aes(x = Lags, y = ACF_vec), stat = "identity", width = .5, fill = aes_list$color_scheme["Coal"]) +
     geom_line(aes(x = Lags, y = CI), linetype = "dashed", color = "#1874CD", linewidth = 1) +
     geom_line(aes(x = Lags, y = -CI), linetype = "dashed", color = "#1874CD", linewidth = 1) +
     geom_hline(yintercept = 0, color = "black", linewidth = 1) +
     theme_bw() +
     scale_y_continuous(
       breaks = seq(-1, 1, 0.1),
-      name = expression(paste("ACF ", epsilon[t]))
+      name = Label_map[Variable]
     ) +
     scale_x_continuous(breaks = seq(0, tail(Lags, 1), by = 2)) +
     aes_list$Theme_element
   # Save plot
   ggsave(ACF_plot,
-    filename = paste0(aes_list$Path, Variable, "_VAR_Resid_ACF.png"), height = 8, width = 14
+    filename = paste0(aes_list$Path, Variable, "_", Prefix,"_Resid_ACF.png"), height = 8, width = 14
   )
   return(ACF_plot)
+}
+
+
+#' Function to display the VAR residuals
+#' @param Data_tib with the dates
+#' @param Resid VAR residuals
+#' @param aes_list list with plot aesthetics
+#' @export Plots in specified folder
+
+Resid_plot_fctn <- function(Data_tib, Resid, aes_list) {
+  # Prepare the data
+  Date <- rep(tail(Data_tib$Date, NROW(Resid)), 2)
+  Resid_long <- Resid %>%
+    as_tibble() %>%
+    pivot_longer(cols = everything(), names_to = "Variable", values_to = "Resid") %>%
+    arrange(Variable) %>%
+    group_by(Variable) %>%
+    mutate(
+      Mean = mean(Resid),
+      Stddev = sd(Resid)
+    ) %>%
+    ungroup()
+  # Set the facet labels
+  # Create mapping for facet label names
+  Label_map <- expression(
+    Coal = "Coal supplies",
+    Price = paste(Delta, log, " Permit price")
+  )
+  Label_helper <- function(Mapping) {
+    as_labeller(
+      function(x) {
+        as.list(Mapping[x])
+      },
+      default = identity
+    )
+  }
+  # Construct the plot
+  Resid_plot <- Resid_long %>%
+    ggplot() +
+    geom_point(aes(x = Date, y = Resid), color = aes_list$color_scheme["Coal"]) +
+    geom_hline(yintercept = 0, color = "black", linewidth = 1) +
+    geom_line(aes(x = Date, y = (Mean - 2 * Stddev)), linetype = "dashed", color = "#1874CD", linewidth = 1) +
+    geom_line(aes(x = Date, y = (Mean + 2 * Stddev)), linetype = "dashed", color = "#1874CD", linewidth = 1) +
+    facet_wrap(~Variable,
+      scales = "free", ncol = 1,
+      labeller = labeller(Variable = Label_helper(Label_map))
+    ) +
+    scale_x_date(name = "", date_breaks = "1 year", date_labels = c("%Y")) +
+    theme_bw() +
+    labs(color = "") +
+    aes_list$Theme_element +
+    scale_y_continuous(
+      name = "VAR residuals"
+    )
+  # Save plot
+  ggsave(Resid_plot,
+    filename = paste0(aes_list$Path, "VAR_Residuals.png"), height = 8, width = 14
+  )
+  return(Resid_plot)
+}
+
+
+#' Function to create plots of the IRFs
+#' @param aes_list list with plot aesthetics
+#' @param aes_list list with plot aesthetics
+#' @export Plots in specified folder
+
+IRF_plot_fcnt <- function(IRF, aes_list) {
+  # Prepare data
+  if (class(IRF) != "list") {
+    Type <- "Ortho"
+    Responses <- IRF$irf
+    # find better way
+    Responses[[1]] <- Responses[[1]][-1,]
+    Responses[[2]] <- Responses[[2]][-1,]
+    Upper <- IRF$Upper
+    Upper[[1]] <- Upper[[1]][-1,]
+    Upper[[2]] <- Upper[[2]][-1,]
+    Lower <- IRF$Lower
+    Lower[[1]] <- Lower[[1]][-1,]
+    Lower[[2]] <- Lower[[2]][-1,]
+  } else {
+    Type <- "General"
+    Responses <- IRF$Coefficients
+    Upper <- IRF$Upper
+    Lower <- IRF$Lower
+  }
+
+  # Create mapping for facet label names
+  Label_map <- expression(
+    Price = paste(Delta, log, " Permit price"),
+    Coal = "Coal supplies"
+  )
+  Axis_label_map <- expression(
+    Price = paste("Response to ", Delta, log, " Permit price"),
+    Coal = "Response to Coal supplies"
+  )
+  Label_helper <- function(Mapping) {
+    as_labeller(
+      function(x) {
+        as.list(Mapping[x])
+      },
+      default = identity
+    )
+  }
+
+  # i tracks the impulse variables
+  for (i in 1:length(Responses)) {
+    IRF_data <- tibble()
+    # j gives the response variables
+    for (j in 1:ncol(Responses[[i]])) {
+      # Prepare the data
+      IRF_data_temp <- tibble(
+        Horizon = 1:NROW(Upper[[i]]),
+        Variable = colnames(Responses[[i]])[j],
+        Response = Responses[[i]][, j],
+        Upper = Upper[[i]][, j],
+        Lower = Lower[[i]][, j]
+      )
+      if (NROW(IRF_data) == 0) {
+        IRF_data <- IRF_data_temp
+      } else {
+        IRF_data <- rbind(IRF_data, IRF_data_temp)
+      }
+    }
+    # Construct the plot
+    IRF_plot <- IRF_data %>%
+      ggplot() +
+      geom_hline(yintercept = 0, color = "black", linewidth = 1) +
+      geom_line(aes(x = Horizon, y = Response), linewidth = 1, color = aes_list$color_scheme["Coal"]) +
+      geom_line(aes(x = Horizon, y = Upper), color = "#1874CD", linewidth = 1, linetype = "dashed") +
+      geom_line(aes(x = Horizon, y = Lower), color = "#1874CD", linewidth = 1, linetype = "dashed") +
+      facet_wrap(~Variable,
+        scales = "free", ncol = 1,
+        labeller = labeller(Variable = Label_helper(Label_map))
+      ) +
+      scale_y_continuous(
+        name = Axis_label_map[i],
+        labels = comma_format(big.mark = ",", decimal.mark = ".")
+      ) +
+      scale_x_continuous(name = "", breaks = seq(1, NROW(IRF_data), 2)) +
+      theme_bw() +
+      labs(color = "") +
+      aes_list$Theme_element
+    # Save plot
+    ggsave(IRF_plot,
+      filename = paste0(aes_list$Path, Type, "_IRF_", names(Responses)[i], ".png"), height = 8, width = 14
+    )
+    assign(paste0(names(Responses[i])), IRF_plot)
+  }
+  return(mget(paste0(names(Responses), sep = "")))
 }

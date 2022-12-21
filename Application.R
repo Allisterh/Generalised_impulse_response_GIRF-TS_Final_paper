@@ -59,7 +59,8 @@ Seas_plot_fctn(Data = SlogData, Variable = "dPrice", aes_list = Plot_list)
 finalData <- tibble(Date = lvlData$Date,
                     Price = SlogData$deseasdPrice,
                     Coal = SlvlData$deseasCoal) %>%
-  filter(!is.na(Price))
+  filter(!is.na(Price)) %>%
+  mutate(Price = (Price - mean(Price)) * 100)
 
 # Construct plot and a table of summary statistics
 Final_series_plot_fctn(Data = finalData, aes_list = Plot_list)
@@ -75,7 +76,7 @@ Lag_selection <- VARselect(dataMat, lag.max = 5, type = "const")$selection
 Lag_selection
 p <- Lag_selection["SC(n)"]
 # 4 AR lags
-VAR_model <- VAR(dataMat, p = p)
+VAR_model <- VAR(dataMat, p = p, type = "const")
 VAR_summary <- VAR_model %>% summary
 VAR_summary
 
@@ -86,22 +87,27 @@ VAR_table_fctn(Output = VAR_summary, Path = Table_path)
 #------------------------------------------------------------------------------------------#
 
 VAR_resid <- resid(VAR_model)
+# Plot of VAR residuals
+Resid_plot_fctn(Data_tib = finalData, Resid = VAR_resid, aes_list = Plot_list)
 
 # Check the integration order of the residuals
 Resid_Price_I_order <- Pantula_fctn(VAR_resid, "Price", d_max = 4, determ = "none")
 UR_table_fctn(Output = Resid_Price_I_order, Variable = "Price_Resid", Path = Table_path)
 Resid_Coal_I_order <- Pantula_fctn(VAR_resid, "Coal", d_max = 4, determ = "none")
 UR_table_fctn(Output = Resid_Coal_I_order, Variable = "Coal_Resid", Path = Table_path)
-# Both residuals series are I(1) (assume the integration order of the dependent variables)
+# Only the residual series is I(1) (assumes the integration order of the dependent variables)
+# Interestingly, the residuals for coal appear stationary
 
 # Check for serial correlation in the residuals
 # graphically (univariate)
-ACF_plot_fctn(Data = VAR_resid, Variable = "Price", Interval = .95, aes_list = Plot_list)
-ACF_plot_fctn(Data = VAR_resid, Variable = "Coal", Interval = .95, aes_list = Plot_list)
+ACF_plot_fctn(Data = VAR_resid, Variable = "Price", Interval = .95, aes_list = Plot_list, Prefix = "VAR")
+ACF_plot_fctn(Data = VAR_resid, Variable = "Coal", Interval = .95, aes_list = Plot_list, Prefix = "VAR")
 # and quantitatively (multivariate)
 Resid_PT_test <- serial.test(VAR_model, lags.pt = 12)
-Resid_PT_test <- serial.test(VAR_model, lags.bg = 12, type = c("BG"))
-# Seems like residual serial correlation is driven by December observations of the price series 
+Serial_test_table_fcnt(Output = Resid_PT_test, Path = Table_path)
+Resid_BG_test <- serial.test(VAR_model, lags.bg = 12, type = c("BG"))
+Serial_test_table_fcnt(Output = Resid_BG_test, Path = Table_path)
+# Both tests reject serial AC in the residuals
 
 # Check if the VAR is stable
 VAR_summary$roots
@@ -113,9 +119,9 @@ any(VAR_summary$roots >= 1)
 #------------------------------------------------------------------------------------------#
 
 Granger_test <- bruceR::granger_causality(VAR_model, test = c("Chisq"))
+Granger_table_fctn(Output = Granger_test, Path = Table_path)
 # Coal does not Granger cause Price
 # Price Granger causes Coal
-Granger_table_fctn(Output = Granger_test, Path = Table_path)
 
 #------------------------------------------------------------------------------------------#
 # Impulse response functions
@@ -129,25 +135,32 @@ Granger_table_fctn(Output = Granger_test, Path = Table_path)
 # structure of ortho = TRUE
 
 O_irf <- irf(VAR_model, n.ahead = 12, ortho = TRUE, runs = 500, ci = .95)
-
+IRF_plot_fcnt(IRF = O_irf, aes_list = Plot_list)
 # Generalized impulse respones functions (Koop et al. 1996; Pesaran & Shin 1998) do not impose a recursive
 # ordering of the contemporanous correlations
-G_irf <- G_irf_boot_fctn(VAR_model, n.ahead = 12, runs = 100, Interval = .95)
+G_irf <- G_irf_boot_fctn(VAR_model, n.ahead = 12, runs = 500, Interval = .95)
+IRF_plot_fcnt(IRF = G_irf, aes_list = Plot_list)
 
 #------------------------------------------------------------------------------------------#
 # Run cointegration tests
 #------------------------------------------------------------------------------------------#
 
 # CI Test
+# Only INTERCEPT in the test regression since we are dealing with first differences
 Trace_test <- ca.jo(dataMat, type = "trace", ecdet = "const", spec = "transitory", K = max(p, 2))
-Trace_test_summary <- Trace_test %>% summary()
-
-# Table here
-
+Trace_test %>% summary()
+# Max Eigevalue test
 Eigen_test <- ca.jo(dataMat, type = "eigen", ecdet = "const", spec = "transitory", K = max(p, 2))
 Eigen_test %>% summary()
 
-VECM <- cajorls(Trace_test, r = 1)
-VECM
+# Estimate the VECM
+VECM_Model <- cajorls(Trace_test, r = 1)
+VECM_Model %>% summary()
+VECM_table_fctn(Trace = Trace_test, Output = VECM_Model, path = Table_path)
 
-# Table here
+# Graphically check for serial correlation in the residuals
+VECM_resid <- VECM_Model$rlm$residuals
+colnames(VECM_resid) <- c("Price", "Coal")
+ACF_plot_fctn(Data = VECM_resid, Variable = "Price", Interval = .95, aes_list = Plot_list, Prefix = "VECM")
+ACF_plot_fctn(Data = VECM_resid, Variable = "Coal", Interval = .95, aes_list = Plot_list, Prefix = "VECM")
+

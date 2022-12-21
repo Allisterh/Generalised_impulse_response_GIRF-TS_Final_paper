@@ -25,9 +25,10 @@ Init_fctn <- function() {
   Read_data <- function(logTransform) {
     Data_temp <- read_excel("Data.xlsx") %>%
       rename(
-        Coal = `Gross inland deliveries hard coal`,
+        Coal = `Coal deliveries`,
         Price = `EU Carbon Price Permits`
-      )
+      ) %>%
+      select(Date, Coal, Price)
     if (logTransform == TRUE) Data_temp <- mutate_if(Data_temp, is.numeric, log)
     Datea <- Data_temp %>%
       mutate(
@@ -118,10 +119,9 @@ Pantula_fctn <- function(Data, Variable, d_max, determ) {
   Pantula_result <- t(rbind(d = d_max:0, Pantula_result))
   I_order <- Pantula_result[which(Pantula_result[, 3] > .05)][1] + 1
   if (is.na(I_order)) {
-    cat(paste("=> Ho cannot be rejected for any order of differences for", Variable, "and d_max =", d_max), "\n")
-  } else {
-    cat(paste("=>", Variable, "is integrated of order", I_order), "\n")
+    I_order <- 0
   }
+  cat(paste("=>", Variable, "is integrated of order", I_order), "\n")
   return(Pantula_result)
 }
 
@@ -135,7 +135,7 @@ Deseason_fctn <- function(Data, Variable) {
   SS_Model <- SSModel(
     pull(Data, Variable) ~
       SSMtrend(degree = 2, Q = list(matrix(NA), matrix(0))) +
-      SSMseasonal(period = 12, Q = matrix(NA), sea.type = "dummy"),
+      SSMseasonal(period = 12, Q = matrix(0), sea.type = "dummy"),
     H = matrix(0)
   )
   SS_ML <- fitSSM(SS_Model, inits = c(0, 0), method = "BFGS")
