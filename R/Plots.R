@@ -12,22 +12,25 @@ Lvl_fd_plot_fctn <- function(Data, logData, aes_list) {
     # To prevent warning messages
     Data <- filter(Data, !is.na(dCoal))
     # Prepare data for the plot
-    lvl_Tib <- select(Data, c(Date, Coal, Price)) %>%
-      mutate(Price = Price / max(Price) * max(Coal))
+    lvl_Tib <- select(Data, c(Date, Coal, Price))  %>%
+     mutate(Price = Price / max(Price) * max(Coal))
     fd_Tib <- select(Data, c(Date, dCoal, dPrice)) %>%
-      mutate(dPrice = dPrice / max(dPrice, na.rm = T) * max(dCoal, na.rm = T))
+     mutate(dPrice = dPrice / max(dPrice, na.rm = T) * max(dCoal, na.rm = T))
     fd_Tib$Type <- paste0("First differences")
     lvl_Tib$Type <- ifelse(Trans == "", "Level", Trans)
     colnames(fd_Tib) <- colnames(lvl_Tib)
+    Plot_data <- rbind(lvl_Tib, fd_Tib)
     # Construct the plot
-    Lvl_Fd_plot <- rbind(lvl_Tib, fd_Tib) %>%
+    Lvl_Fd_plot <- Plot_data %>%
       ggplot() +
       geom_line(aes(x = Date, y = Coal, color = paste0(Trans, "Coal supply")), linewidth = 1) +
-      geom_line(aes(x = Date, y = Price, color = paste0(Trans, "Permit price")), linewidth = 1) +
+      geom_line(aes(
+        x = Date, y = Price,
+        color = paste0(Trans, "Permit price")
+      ), linewidth = 1) +
       scale_y_continuous(
         name = "Coal supply", # in thou. T
         labels = comma_format(big.mark = ",", decimal.mark = "."),
-        # limits = c((min(Data$Coal, na.rm = T) * .9), max(Data$Coal, na.rm = T) * 1.1),
         sec.axis = sec_axis(~ . * (max(Data$Price, na.rm = T) / max(Data$Coal, na.rm = T)), name = "Permit Price"),
       ) +
       facet_grid(rows = vars(Type), scales = "free") +
@@ -36,6 +39,7 @@ Lvl_fd_plot_fctn <- function(Data, logData, aes_list) {
       labs(color = "") +
       aes_list$Theme_element +
       scale_color_manual(values = color_map)
+    browser()
     return(Lvl_Fd_plot)
   }
 
@@ -169,8 +173,8 @@ ACF_plot_fctn <- function(Data, Variable, Interval = .95, aes_list, Prefix = "")
   Lags <- ACF$lag[, 1, 1][-1]
   # Set labels
   Label_map <- c(
-    "Coal" = "Coal supply",
-    "Price" = expression(paste(log, Delta, " Permit price"))
+    "Coal" = expression(paste(Delta, " Coal supply")),
+    "Price" = expression(paste(log, Delta^2, " Permit price"))
   )
   # Construct the plot
   ACF_plot <- ggplot() +
@@ -187,7 +191,7 @@ ACF_plot_fctn <- function(Data, Variable, Interval = .95, aes_list, Prefix = "")
     aes_list$Theme_element
   # Save plot
   ggsave(ACF_plot,
-    filename = paste0(aes_list$Path, Variable, "_", Prefix,"_Resid_ACF.png"), height = 8, width = 14
+    filename = paste0(aes_list$Path, Variable, "_", Prefix, "_Resid_ACF.png"), height = 8, width = 14
   )
   return(ACF_plot)
 }
@@ -215,8 +219,8 @@ Resid_plot_fctn <- function(Data_tib, Resid, aes_list) {
   # Set the facet labels
   # Create mapping for facet label names
   Label_map <- expression(
-    Coal = "Coal supplies",
-    Price = paste(Delta, log, " Permit price")
+    Coal = paste(Delta, "Coal supplies"),
+    Price = paste(Delta^2, log, " Permit price")
   )
   Label_helper <- function(Mapping) {
     as_labeller(
@@ -230,7 +234,7 @@ Resid_plot_fctn <- function(Data_tib, Resid, aes_list) {
   Resid_plot <- Resid_long %>%
     ggplot() +
     geom_point(aes(x = Date, y = Resid), color = aes_list$color_scheme["Coal"]) +
-    geom_hline(yintercept = 0, color = "black", linewidth = 1) +
+    geom_hline(yintercept = 0, color = "black", linewidth = .3) +
     geom_line(aes(x = Date, y = (Mean - 2 * Stddev)), linetype = "dashed", color = "#1874CD", linewidth = 1) +
     geom_line(aes(x = Date, y = (Mean + 2 * Stddev)), linetype = "dashed", color = "#1874CD", linewidth = 1) +
     facet_wrap(~Variable,
@@ -263,14 +267,14 @@ IRF_plot_fcnt <- function(IRF, aes_list) {
     Type <- "Ortho"
     Responses <- IRF$irf
     # find better way
-    Responses[[1]] <- Responses[[1]][-1,]
-    Responses[[2]] <- Responses[[2]][-1,]
+    Responses[[1]] <- Responses[[1]][-1, ]
+    Responses[[2]] <- Responses[[2]][-1, ]
     Upper <- IRF$Upper
-    Upper[[1]] <- Upper[[1]][-1,]
-    Upper[[2]] <- Upper[[2]][-1,]
+    Upper[[1]] <- Upper[[1]][-1, ]
+    Upper[[2]] <- Upper[[2]][-1, ]
     Lower <- IRF$Lower
-    Lower[[1]] <- Lower[[1]][-1,]
-    Lower[[2]] <- Lower[[2]][-1,]
+    Lower[[1]] <- Lower[[1]][-1, ]
+    Lower[[2]] <- Lower[[2]][-1, ]
   } else {
     Type <- "General"
     Responses <- IRF$Coefficients
@@ -280,12 +284,12 @@ IRF_plot_fcnt <- function(IRF, aes_list) {
 
   # Create mapping for facet label names
   Label_map <- expression(
-    Price = paste(Delta, log, " Permit price"),
-    Coal = "Coal supplies"
+    Price = paste(Delta^2, log, " Permit price"),
+    Coal = paste(Delta, " Coal supplies")
   )
   Axis_label_map <- expression(
-    Price = paste("Response to ", Delta, log, " Permit price"),
-    Coal = "Response to Coal supplies"
+    Price = paste("Response to ", Delta^2, log, " Permit price"),
+    Coal = paste("Response to ", Delta, " Coal supplies")
   )
   Label_helper <- function(Mapping) {
     as_labeller(

@@ -43,14 +43,14 @@ UR_table_fctn(Output = Coal_I_order, Variable = "Coal", Path = Table_path)
 #------------------------------------------------------------------------------------------#
 
 # Coal series
-SlvlData <- Deseason_fctn(Data = logData, Variable = "Coal")
+SlvlData <- Deseason_fctn(Data = lvlData, Variable = "Coal")
 # Make plots of seasonality and de-seasoned series
 Seas_plot_fctn(Data = SlvlData, Variable = "Coal", aes_list = Plot_list)
 
 # Price series
-SlogData <- Deseason_fctn(Data = logData, Variable = "Price")
+SlogData <- Deseason_fctn(Data = logData, Variable = "dPrice")
 # Make plots of seasonality and de-seasoned series
-Seas_plot_fctn(Data = SlogData, Variable = "Price", aes_list = Plot_list)
+Seas_plot_fctn(Data = SlogData, Variable = "dPrice", aes_list = Plot_list)
 
 #------------------------------------------------------------------------------------------#
 # Plot of the final two series we will be working with
@@ -58,13 +58,11 @@ Seas_plot_fctn(Data = SlogData, Variable = "Price", aes_list = Plot_list)
 
 finalData <- tibble(
   Date = lvlData$Date,
-  Price = SlogData$deseasPrice,
+  Price = SlogData$deseasdPrice,
   Coal = SlvlData$deseasCoal
 ) %>%
   filter(!is.na(Price)) %>%
   mutate(Price = (Price - mean(Price)) * 100)
-
-order_integration(select(finalData, -Date))$order_int
 
 # Construct plot and a table of summary statistics
 Final_series_plot_fctn(Data = finalData, aes_list = Plot_list)
@@ -83,11 +81,11 @@ dataMat_Stat <- as_tibble(dataMat) %>%
   filter(!is.na(Price)) %>%
   as.matrix()
 
-Lag_selection <- VARselect(dataMat_Stat, lag.max = 5, type = "none")$selection
-Lag_selection
-p <- Lag_selection["SC(n)"]
+Lag_selection_VAR <- VARselect(dataMat_Stat, lag.max = 5, type = "none")$selection
+Lag_selection_VAR
+p_VAR <- Lag_selection_VAR["SC(n)"]
 # 3 AR lags
-VAR_model <- VAR(dataMat_Stat, p = p, type = "none")
+VAR_model <- VAR(dataMat_Stat, p = p_VAR, type = "none")
 VAR_summary <- VAR_model %>% summary()
 VAR_summary
 
@@ -154,17 +152,20 @@ IRF_plot_fcnt(IRF = G_irf, aes_list = Plot_list)
 # Run cointegration tests
 #------------------------------------------------------------------------------------------#
 
+Lag_selection_VECM <- VARselect(dataMat, lag.max = 5, type = "none")$selection
+Lag_selection_VECM
+p_VECM <- Lag_selection_VECM["SC(n)"]
 # CI Test
 # Only INTERCEPT in the test regression since we are dealing with first differences
-Trace_test <- ca.jo(dataMat, type = "trace", ecdet = "const", spec = "transitory", K = max(p, 2))
+Trace_test <- ca.jo(dataMat, type = "trace", ecdet = "const", spec = "transitory", K = max(p_VECM, 2))
 Trace_test %>% summary()
 # Max Eigevalue test
-Eigen_test <- ca.jo(dataMat, type = "eigen", ecdet = "const", spec = "transitory", K = max(p, 2))
+Eigen_test <- ca.jo(dataMat, type = "eigen", ecdet = "const", spec = "transitory", K = max(p_VECM, 2))
 Eigen_test %>% summary()
 
 # Estimate the VECM
 VECM_Model <- cajorls(Trace_test, r = 1)
-VECM_Model %>% summary()
+VECM_Model$rlm %>% summary()
 VECM_table_fctn(Trace = Trace_test, Output = VECM_Model, path = Table_path)
 
 # Graphically check for serial correlation in the residuals
